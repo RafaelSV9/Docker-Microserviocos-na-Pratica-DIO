@@ -1,0 +1,107 @@
+version: "3.9"
+
+networks:
+  shibakita-net:
+    driver: overlay
+
+secrets:
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - shibakita-net
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+  auth-service:
+    image: shibakita/auth-service:1.0.0
+    networks:
+      - shibakita-net
+    secrets:
+      - jwt_secret
+    environment:
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=shibakita
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+  catalog-service:
+    image: shibakita/catalog-service:1.0.0
+    networks:
+      - shibakita-net
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=shibakita
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - CACHE_HOST=redis
+      - CACHE_PORT=6379
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+  orders-service:
+    image: shibakita/orders-service:1.0.0
+    networks:
+      - shibakita-net
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=shibakita
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        order: start-first
+      restart_policy:
+        condition: on-failure
+
+  postgres:
+    image: postgres:16-alpine
+    networks:
+      - shibakita-net
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=shibakita
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - shibakita-net
+
+volumes:
+  pgdata:
